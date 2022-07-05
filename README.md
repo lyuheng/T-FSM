@@ -53,6 +53,26 @@ Use the following command:
 ./run -file ../data/mico.lg -freq 9480 -thread 32
 ```
 
+## Fraction-Score Version
+Under the root directory of the project, execute the following command to complie.
+```
+cd T-FSM/fraction-score
+make
+```
+
+Run serial FSM using the following command.
+```
+./run -file [GRAPHPATH] -freq [F] -thread [T] -maxNodes [MAXNODE]
+```
+
+GRAPHPATH: required, the input graph path
+
+F: required, the user-give support threshold, in terms of Fraction-Score metric
+
+T: required, the number of threads
+
+MAXNODE: optional, parameter to set the maximum subgraph size (number of vertices)
+
 ## Input
 
 Input graph starts with 't N M' where N is the number of vertices and M is the number of edges. A vertex and an edge are formatted as 'v VertexID VertexLabel Degree' and 'e VertexID VertexID EdgeLabel' respectively. Note that we require that the vertex id starts from 0 and the range is [0,N - 1] where V is the vertex set. The following is an input sample
