@@ -5,6 +5,7 @@
 #include "decompose.h"
 #include "pretty_print.h"
 #include "canonical.h"
+#include "setting.h"
 
 #include <map>
 #include <fstream>
