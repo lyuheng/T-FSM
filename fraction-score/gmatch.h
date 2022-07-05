@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <sys/timeb.h>
 
-#define TIMEOUT_THRESHOLD 1 // no Timeout Search
+#define TIMEOUT_THRESHOLD 0.1 // no Timeout Search
 #define INVALID_VERTEX_ID 1000000000
 
 struct MatchingStatus
