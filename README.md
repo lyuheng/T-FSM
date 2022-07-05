@@ -6,7 +6,7 @@
 Execute the following commands to compile.
 ```
 git clone https://github.com/lyuheng/T-FSM.git
-cd serial
+cd T-FSM/serial
 make
 ```
 Run serial FSM using the following command.
