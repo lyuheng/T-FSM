@@ -11,14 +11,14 @@ make
 ```
 Run serial FSM using the following command.
 ```
-./run -file [GRAPH_PATH] -freq [F] -maxNodes [mNodes]
+./run -file [GRAPH_PATH] -freq [F] -maxNodes [MAXNODE]
 ```
 
 GRAPH_PATH: required, the input graph path
 
 F: required, the user-give support threshold
 
-mNodes: optional, parameter to set the maximum subgraph size (number of vertices)
+MAXNODE: optional, parameter to set the maximum subgraph size (number of vertices)
 
 Example:
 
