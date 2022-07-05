@@ -1,1 +1,0 @@
-./run 2 graph_data
