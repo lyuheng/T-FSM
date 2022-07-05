@@ -44,7 +44,6 @@ int main(int argc, char *argv[])
 
     auto time1 = steady_clock::now();
 
-    int support = atoi(argv[1]);
     grami.nsupport_ = support;
     grami.pruned_graph.nsupport_ = support;
    
