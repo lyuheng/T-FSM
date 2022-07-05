@@ -3,18 +3,17 @@
 
 ## Serial Verision
 
-Execute the following commands to compile.
+Under the root directory of the project, execute the following commands to compile.
 ```
-git clone https://github.com/lyuheng/T-FSM.git
 cd T-FSM/serial
 make
 ```
 Run serial FSM using the following command.
 ```
-./run -file [GRAPH_PATH] -freq [F] -maxNodes [MAXNODE]
+./run -file [GRAPHPATH] -freq [F] -maxNodes [MAXNODE]
 ```
 
-GRAPH_PATH: required, the input graph path
+GRAPHPATH: required, the input graph path
 
 F: required, the user-give support threshold
 
@@ -28,9 +27,8 @@ Use the following command:
 ```
 
 ## Parallel Version
-Execute the following command to complie.
+Under the root directory of the project, execute the following command to complie.
 ```
-git clone https://github.com/lyuheng/T-FSM.git
 cd T-FSM/parallel
 make
 ```
