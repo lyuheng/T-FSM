@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
    
     Worker worker(thread_num);
 
-    worker.load_data(support, argv[2]);
+    worker.load_data(support, fileName);
 
     auto time2 = steady_clock::now();
 
