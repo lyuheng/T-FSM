@@ -15,7 +15,7 @@ Run serial FSM using the following command.
 
 GRAPHPATH: required, the input graph path
 
-F: required, the user-give support threshold
+F: required, the user-given support threshold
 
 MAXNODE: optional, parameter to set the maximum subgraph size (number of vertices)
 
@@ -40,7 +40,7 @@ Run serial FSM using the following command.
 
 GRAPHPATH: required, the input graph path
 
-F: required, the user-give support threshold
+F: required, the user-given support threshold
 
 T: required, the number of threads
 
@@ -67,7 +67,7 @@ Run serial FSM using the following command.
 
 GRAPHPATH: required, the input graph path
 
-F: required, the user-give support threshold, in terms of Fraction-Score metric
+F: required, the user-given support threshold, in terms of Fraction-Score metric
 
 T: required, the number of threads
 
