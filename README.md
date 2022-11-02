@@ -17,7 +17,7 @@ GRAPHPATH: required, the input graph path
 
 F: required, the user-given support threshold
 
-MAXNODE: optional, parameter to set the maximum subgraph size (number of vertices)
+MAXNODE: optional, parameter to constrain the maximum subgraph size (number of vertices)
 
 Example:
 
@@ -27,7 +27,7 @@ Use the following command:
 ```
 
 ## Parallel Version
-Under the root directory of the project, execute the following command to complie.
+Under the root directory of the project, execute the following commands to complie.
 ```
 cd T-FSM/parallel
 make
@@ -44,7 +44,7 @@ F: required, the user-given support threshold
 
 T: required, the number of threads
 
-MAXNODE: optional, parameter to set the maximum subgraph size (number of vertices)
+MAXNODE: optional, parameter to constrain the maximum subgraph size (number of vertices)
 
 Example:
 
@@ -54,7 +54,7 @@ Use the following command:
 ```
 
 ## Fraction-Score Version
-Under the root directory of the project, execute the following command to complie.
+Under the root directory of the project, execute the following commands to complie.
 ```
 cd T-FSM/fraction-score
 make
@@ -71,7 +71,7 @@ F: required, the user-given support threshold, in terms of Fraction-Score metric
 
 T: required, the number of threads
 
-MAXNODE: optional, parameter to set the maximum subgraph size (number of vertices)
+MAXNODE: optional, parameter to constrain the maximum subgraph size (number of vertices)
 
 ## Input
 
