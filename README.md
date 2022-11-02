@@ -42,7 +42,7 @@ GRAPHPATH: required, the input graph path
 
 F: required, the user-given support threshold
 
-T: required, the number of threads
+T: required, the number of threads, 32 by default
 
 MAXNODE: optional, parameter to constrain the maximum subgraph size (number of vertices)
 
@@ -50,7 +50,7 @@ Example:
 
 Use the following command:
 ```
-./run -file ../data/mico.lg -freq 9480 -thread 32
+./run -file ../data/mico.lg -freq 9480 -thread 4
 ```
 
 ## Fraction-Score Version
@@ -60,7 +60,7 @@ cd T-FSM/fraction-score
 make
 ```
 
-Run serial FSM using the following command.
+Run Fraction-Score FSM using the following command.
 ```
 ./run -file [GRAPHPATH] -freq [F] -thread [T] -maxNodes [MAXNODE]
 ```
