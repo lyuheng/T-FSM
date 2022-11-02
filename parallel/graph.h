@@ -759,7 +759,7 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
     }
     pruned_graph.set_nedges(edge_id);
     
-// #pragma omp parallel for schedule(dynamic, 1) num_threads(32)
+#pragma omp parallel for schedule(dynamic, 1) num_threads(32)
     for (ui i = 0; i < pruned_graph.vertices_.size(); ++i)
     {
         std::sort(pruned_graph.vertices_[i].edges.begin(), pruned_graph.vertices_[i].edges.end(),  [] (const auto& lhs, const auto& rhs) {
