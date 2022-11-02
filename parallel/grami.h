@@ -1,7 +1,6 @@
 #pragma once
 
 #include "graph.h"
-#include "gmatch.h"
 #include "decompose.h"
 #include "pretty_print.h"
 #include "canonical.h"
@@ -31,9 +30,9 @@ public:
 
     unordered_map<vLabel, unordered_set<vLabel>> neighbor_labels;
 
-    GMatchEngine auto_engine;   // automorphisms
-    GMatchEngine gmatch_engine; // subgraph matching
-    GMatchEngine exist_engine;  // check existence
+    // GMatchEngine auto_engine;   // automorphisms
+    // GMatchEngine gmatch_engine; // subgraph matching
+    // GMatchEngine exist_engine;  // check existence
 
     Decompose decomposer;
 
@@ -171,7 +170,7 @@ void GraMi::extend(Pattern &pattern, PatternPVec &ext_pattern_vec)
                     new_pattern->copy(pattern);
                     new_pattern->extend(dfs_code);
 
-                    if(isCan(*new_pattern))
+                    if (isCan(*new_pattern))
                     {
                         ext_pattern_vec.push_back(new_pattern);
                     }
@@ -231,7 +230,7 @@ void GraMi::extend(Pattern &pattern, PatternPVec &ext_pattern_vec)
         }
     }
 
-    if(Settings::maxNumNodes == -1 || pattern.size() < Settings::maxNumNodes)
+    if (Settings::maxNumNodes == -1 || pattern.size() < Settings::maxNumNodes)
     {
         for (ui i = 0; i < pattern.right_most_path.size(); ++i)
         {
@@ -272,7 +271,7 @@ void GraMi::extend(Pattern &pattern, PatternPVec &ext_pattern_vec)
 }
 
 
-/** rightmost extension, ###obsolete### */
+/** rightmost extension */
 void GraMi::extend(Pattern &pattern, PatternVec &ext_pattern_vec)
 {
     VertexID last_id = pattern.size() - 1;

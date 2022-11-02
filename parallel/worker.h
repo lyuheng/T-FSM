@@ -73,6 +73,10 @@ public:
         {
             // auto it = parallel_vec[i];
             // int tid = omp_get_thread_num();
+            
+            // cout<<"~~~~~"<<endl;
+            // cout << it->second->toString();
+            // cout<<"~~~~~"<<endl;
 
             PatternPVec ext_pattern_vec;
 

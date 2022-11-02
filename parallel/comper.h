@@ -2,6 +2,7 @@
 
 #include "global.h"
 #include "grami.h"
+#include "gmatch.h"
 #include "decompose.h"
 
 #include <iostream>
@@ -159,6 +160,12 @@ struct task_container
 
     vector<vector<subPattern> > maps;
 
+
+    vector<VertexID *> all_matching_order;
+    vector<VertexID **> all_bn;
+    vector<ui *> all_bn_count;
+
+
     task_container(int id)
     {
         qid = id;
@@ -166,7 +173,7 @@ struct task_container
 
     void init() // called when query is added to activeQ_list
     {   
-        int size = pattern->size();    
+        int size = pattern->size();
 
         // Temporarily initialize the size
         for(ui i = 0; i < size; ++i)
@@ -212,6 +219,10 @@ struct task_container
                 edge_matrix[i][j] = NULL;
             }
         }
+
+        all_matching_order.resize(size, NULL);
+        all_bn.resize(size, NULL);
+        all_bn_count.resize(size, NULL);
     }
 
     ~task_container()
@@ -229,6 +240,20 @@ struct task_container
             delete[] edge_matrix[i];
         }
         delete[] edge_matrix;
+
+        for (ui i = 0; i < pattern->size(); ++i)
+        {
+            if (all_bn[i] != NULL)
+            {
+                for (ui j = 0; j < pattern->size(); ++j)
+                {
+                    delete[] all_bn[i][j]; // FIXME: 
+                }
+            }
+            delete[] all_bn[i];
+            delete[] all_bn_count[i];
+            delete[] all_matching_order[i];
+        }
 
         delete pattern; // created by extend(.)
 
@@ -410,8 +435,11 @@ public:
         cur_qid = tc->qid;
 
         gmatch_engine.set(&grami.pruned_graph, pattern);
-        gmatch_engine.generateGQLQueryPlan(task->u);
-        gmatch_engine.generateBN();
+        // gmatch_engine.generateGQLQueryPlan(task->u);
+        // gmatch_engine.generateBN();
+        gmatch_engine.matching_order = tc->all_matching_order[task->u]; // common
+        gmatch_engine.bn = tc->all_bn[task->u]; // common
+        gmatch_engine.bn_count = tc->all_bn_count[task->u]; // common
         gmatch_engine.edge_matrix = tc->edge_matrix; // common
 
         vector<VertexID> embedding(pattern->size());
@@ -443,7 +471,6 @@ public:
 
                     // ========== Early Termination ==========
                     tc->vq_stops_refill_mtx[j].rdlock();
-                    // vq_stops_refill[u] = true means vertex u is already frequent
                     if(!tc->vq_stops_refill[j])
                     {
                         if(tc->domain_matches[j].size() >= grami.nsupport_)
@@ -483,11 +510,13 @@ public:
                 totask->ms->idx_embedding.resize(pattern->size());
                 totask->ms->idx_embedding[task->u] = task->v_idx;
                 totask->ms->visited.insert(task->v);
-                totask->skip = true;
-
+                totask->skip = true; 
+ 
                 add_timeout_task(totask, true);
 
-                // cout << "add TIMEOUT successfully!!!!!!!!!!" << endl;
+#ifdef VERBOSE_MODE
+                cout << "add TIMEOUT successfully!!!!!!!!!!" << endl;
+#endif
             }
             else
             {
@@ -497,12 +526,13 @@ public:
             delete task;
         }
 
-        gmatch_engine.clear_match();
+        // gmatch_engine.clear_match();
         gmatch_engine.reset();
 
         return value;
     }
 
+    /** Obsolete, not used !!!!!!!!! */
     int compute_timeout(Task *task, MatchingStatus &ms)
     {
         Pattern *pattern = tc->pattern;
@@ -603,6 +633,123 @@ public:
         return finish_all;
     }
 
+
+#ifdef OPTIMIZED_MATCH
+
+    /** Iterative style of dfs_decompose(.). No fast forward temporarily */
+    void dfs_decompose_iterative(ui depth, Pattern *pattern, vector<Domain> &candidates, VertexID *matching_order, 
+                    vector<VertexID> & embedding, vector<VertexID>& idx_embedding, unordered_set<VertexID> &visited, 
+                    VertexID **bn, ui *bn_count, ui &num_decomposed_task, bool &found_result, TimeOutTask *totaskOri, 
+                    Task *task, bool &proceed, ui ffdepth, vector<ui> &counter)
+    {
+        for (int i = 0; i < depth; ++i)
+        {
+            gmatch_engine.mvisited_array[embedding[matching_order[i]]] = true;
+        }
+
+        ui cur_depth = depth;
+        ui max_depth = pattern->size();
+
+        if (cur_depth == 0)
+        {
+            VertexID start_vertex = matching_order[cur_depth];
+            counter[cur_depth] = 0; //#### TODO:
+            gmatch_engine.midx_count[cur_depth] = pattern->get_cands()[start_vertex].size();
+
+            for (ui i = 0; i < gmatch_engine.midx_count[cur_depth]; ++i) 
+            {
+                gmatch_engine.mvalid_candidate_idx[cur_depth][i] = i;
+            }
+        }
+        else
+        {
+            counter[cur_depth] = 0; //#### TODO: No fast forward temporarily
+            gmatch_engine.generateValidCandidateIndex(cur_depth, idx_embedding);
+        }
+
+        while(true)
+        {
+            while (counter[cur_depth] < gmatch_engine.midx_count[cur_depth])
+            {
+                if(found_result) break; // if found one result, we don't search any further.
+                if(!proceed) break;
+
+                ui valid_idx = gmatch_engine.mvalid_candidate_idx[cur_depth][counter[cur_depth]];
+                ui u = matching_order[cur_depth];
+                ui v = candidates[u].candidate[valid_idx];
+
+                if (gmatch_engine.mvisited_array[v])
+                {
+                    counter[cur_depth] += 1;
+                    continue;
+                }
+
+                embedding[u] = v;
+                idx_embedding[u] = valid_idx;
+                gmatch_engine.mvisited_array[v] = true;
+                counter[cur_depth] += 1;
+
+                if (cur_depth == max_depth - 1)
+                { 
+                    found_result = true;
+                    gmatch_engine.mvisited_array[v] = false;
+                }
+                else if (gmatch_engine.countElaspedTime() < TIMEOUT_THRESHOLD)
+                {
+                    cur_depth += 1;
+                    counter[cur_depth] = 0;
+                    gmatch_engine.generateValidCandidateIndex(cur_depth, idx_embedding);
+                }
+                else
+                {
+                    tc->vq_stops_refill_mtx[task->u].rdlock();
+                    // only if domain of A is not done, plus current pattern is still frequent so far
+                    if(!tc->vq_stops_refill[task->u] && tc->frequent_tag) 
+                    {
+                        // throw current task into L_timeout
+                        tc->vq_stops_refill_mtx[task->u].unlock();
+
+                        // decompose task
+                        TimeOutTask * totask = new TimeOutTask(task, pattern->size());
+                        totask->ms->depth = cur_depth+1;
+                        totask->ms->embedding = embedding;
+                        totask->ms->idx_embedding = idx_embedding;
+                        totask->ms->visited = visited; // TODO: 
+                        add_timeout_task(totask, false);
+
+#ifdef VERBOSE_MODE
+                        // cout << "add TIMEOUT again successfully!!!!!!!!!!" << endl;
+#endif
+
+                        num_decomposed_task ++;
+                    }
+                    else
+                    {
+                        tc->vq_stops_refill_mtx[task->u].unlock();
+
+                        totaskOri->prog->prog_lock.lock();
+                        totaskOri->prog->decompose_tag = true;
+                        totaskOri->prog->prog_lock.unlock();
+                        proceed = false;
+                    }
+                    gmatch_engine.mvisited_array[v] = false;
+                }
+            }
+            cur_depth -= 1;
+            if (cur_depth < depth)
+                break;
+            else
+                gmatch_engine.mvisited_array[embedding[matching_order[cur_depth]]] = false;
+        }
+
+        for (int i = 0; i < depth; ++i)
+        {
+            gmatch_engine.mvisited_array[embedding[matching_order[i]]] = false;
+        }
+    }
+
+#endif
+
     void dfs_decompose(ui depth, Pattern *pattern, vector<Domain> &candidates, VertexID *matching_order, 
                     vector<VertexID> & embedding, vector<VertexID>& idx_embedding, unordered_set<VertexID> &visited, 
                     VertexID **bn, ui *bn_count, ui &num_decomposed_task, bool &found_result, TimeOutTask *totaskOri, Task *task, bool &proceed, 
@@ -659,7 +806,12 @@ public:
                 ftime(&cur_time);
                 drun_time = cur_time.time-gmatch_engine.gtime_start.time+(double)(cur_time.millitm-gmatch_engine.gtime_start.millitm)/1000;
 
-                if(drun_time < DECOMPOSE_TIME_THRESHOLD || skip)  // TODO: consider the size of task_queue
+                if (skip) // Fast forward to recover last traversal place
+                {
+                    dfs_decompose(depth+1, pattern, candidates, matching_order, embedding, idx_embedding, 
+                                visited, bn, bn_count, num_decomposed_task, found_result, totaskOri, task, proceed, ffdepth, counter, skip);
+                }
+                else if (drun_time < DECOMPOSE_TIME_THRESHOLD) 
                 {
                     dfs_decompose(depth+1, pattern, candidates, matching_order, embedding, idx_embedding, 
                                         visited, bn, bn_count, num_decomposed_task, found_result, totaskOri, task, proceed, ffdepth, counter, skip);
@@ -683,6 +835,9 @@ public:
                         totask->ms->idx_embedding = idx_embedding;
                         totask->ms->visited = visited;
                         add_timeout_task(totask, false);
+#ifdef VERBOSE_MODE
+                        // cout << "add TIMEOUT again successfully!!!!!!!!!!" << endl;
+#endif
 
                         num_decomposed_task ++;
                     }
@@ -732,19 +887,30 @@ public:
             cur_tid = totask->get_id();
 
             gmatch_engine.set(&grami.pruned_graph, pattern);
-            gmatch_engine.generateGQLQueryPlan(task->u);
-            gmatch_engine.generateBN();
+            // gmatch_engine.generateGQLQueryPlan(task->u); 
+            // gmatch_engine.generateBN();
+            gmatch_engine.matching_order = tc->all_matching_order[task->u]; // common
+            gmatch_engine.bn = tc->all_bn[task->u]; // common
+            gmatch_engine.bn_count = tc->all_bn_count[task->u]; // common
             gmatch_engine.edge_matrix = tc->edge_matrix; // common
 
+            // DFS trackers
             ui num_decomposed_task = 0;
             bool found_result = false;
             bool proceed = true;
             
             // Start searching ...
             ftime(&gmatch_engine.gtime_start);
+
+#ifdef OPTIMIZED_MATCH
+            dfs_decompose_iterative(ms.depth, pattern, pattern->get_cands(), gmatch_engine.matching_order, ms.embedding, ms.idx_embedding, ms.visited, 
+                            gmatch_engine.bn, gmatch_engine.bn_count, num_decomposed_task, found_result, totask, task, proceed, ms.ffdepth, ms.counter);
+#else
             dfs_decompose(ms.depth, pattern, pattern->get_cands(), gmatch_engine.matching_order, ms.embedding, ms.idx_embedding, ms.visited, 
                             gmatch_engine.bn, gmatch_engine.bn_count, num_decomposed_task, found_result, totask, task, proceed, ms.ffdepth, ms.counter, 
                             totask->skip); // with divided-and-conquer, not in gmatch.h
+#endif
+
 
             if(found_result)
             {
@@ -783,7 +949,7 @@ public:
                     }
                 }
             }
-            gmatch_engine.clear_match();
+            // gmatch_engine.clear_match();
             gmatch_engine.reset();
         }
 
@@ -858,9 +1024,11 @@ public:
         results_counter[thread_id]++;
         // cout << "##### " << pattern->size() << " ########" << endl;
 
+#ifdef VERBOSE_MODE
         cout << "#####" << endl;
-        cout << pattern->toString() << endl;
+        cout << pattern->toString();
         cout << "#####" << endl;
+#endif 
 
         // cout << pattern->toString() << endl;
 
@@ -922,10 +1090,16 @@ public:
             // cout << "##### " << pattern->size() << " ########" << endl;
 
             
-            
-            cout << "~~~~~" << endl;
-            cout << pattern->toString() << endl;
-            cout << "~~~~~" << endl;
+            // if (pattern->size()*(pattern->size()-1) /2 == pattern->get_nedges() && pattern->distinct_labels())
+            // {
+#ifdef VERBOSE_MODE
+                cout << "~~~~~" << endl;
+                cout << pattern->toString();
+                
+                // cout << tc->domain_matches[0].size() << " " <<  tc->domain_matches[1].size() << " " << tc->domain_matches[2].size() << endl;
+                cout << "~~~~~" << endl;
+#endif
+            // }
             
 
             // cout << pattern->toString() << endl;
@@ -960,7 +1134,6 @@ public:
             {
                 // add into datastack
                 task_container *new_tc = new task_container(qid++);
-
 
                 Pattern * child_pattern = *it;
                 child_pattern->parent_prog = tc->pattern->prog;
@@ -1104,6 +1277,15 @@ public:
         if(tc->frequent_tag)
         {
             tc->domain_increment(u);
+            
+            // if(tc->domain_finished[u] == tc->pattern->get_cands()[u].size() && tc->domain_matches[u].size() >= grami.nsupport_) 
+            // {
+            //     tc->vq_stops_refill_mtx[u].wrlock(); // upgrade rdlock to wrlock
+            //     tc->vq_stops_refill[u] = true; // prevent repetitve increment
+            //     tc->vq_stops_refill_mtx[u].unlock();
+
+            //     refill_check(u);
+            // }
 
             // ======= update tc->frequent_tag =======
             if(tc->domain_early_exit(u))
@@ -1249,7 +1431,7 @@ public:
                             
                             bool existence = true;
                             
-                            
+                            //**                     
                             // if totask is on first level
                             if(totask->skip)
                             {
@@ -1282,7 +1464,9 @@ public:
 
                                         if (!existence)
                                         {
-                                            tc->pattern->non_candidates[i].insert(task->v);
+                                            tc->non_cand_mtx[task->u].lock();
+                                            tc->pattern->non_candidates[u].insert(task->v);
+                                            tc->non_cand_mtx[task->u].unlock();
 
                                             postprocess(u);
                                             delete totask;
@@ -1293,6 +1477,7 @@ public:
                                     if (!existence) break;
                                 }
                             }
+                            //*/
                             // =========== Decompose pruning done ============
                             
                             if(existence)
@@ -1492,6 +1677,11 @@ public:
                         if(keep)
                         {
                             gmatch_engine.buildTable(tc_new->edge_matrix);
+                            for (ui i = 0; i < tc_new->pattern->size(); ++i)
+                            {
+                                gmatch_engine.generateGQLQueryPlan(i, tc_new->all_matching_order[i]);
+                                gmatch_engine.generateBN(tc_new->all_bn_count[i], tc_new->all_bn[i], tc_new->all_matching_order[i]);
+                            }
                             gmatch_engine.reset();
 
                             activeQ_lock.wrlock();

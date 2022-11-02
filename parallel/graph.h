@@ -112,6 +112,8 @@ public:
     int nedges_;
     Vertices vertices_;
 
+    ui maxLabelFreq;
+
     unordered_map<vLabel, vector<VertexID> > nodesByLabel; // nodesByLabel[vLabel] = list of v-ids with vLabel
 
     unordered_set<eLabel> freqEdgeLabels;
@@ -124,12 +126,12 @@ public:
 
     vector<unordered_map<vLabel, double> > vtx_frac;
 
-    Graph() : nedges_(0)
+    Graph() : nedges_(0), maxLabelFreq(0)
     {
         vertices_.resize(0);
     }
 
-    Graph(int support) : nedges_(0), nsupport_(support)
+    Graph(int support) : nedges_(0), maxLabelFreq(0), nsupport_(support)
     {
         vertices_.resize(0);
     }
@@ -222,6 +224,21 @@ public:
     void toGraph(Pattern &pattern);
 
     void compute_fraction_score();
+
+    void insert(EdgeType &vec, VertexID from, eLabel edge_label, VertexID to, ui edgeId)
+    {   
+        auto it = vec.begin();
+        for ( ; it != vec.end(); ++it)
+        {
+            if(it->to > to)
+            {
+                vec.emplace(it, from, edge_label, to, edgeId);
+                return;
+            }
+        }
+        
+        vec.emplace(it, from, edge_label, to, edgeId);
+    }
 };
 
 // DFS Code
@@ -708,6 +725,8 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
 
                 pruned_graph.vertices_[id_map[from]].edges.emplace_back(id_map[from], label, id_map[to], edge_id);
                 pruned_graph.vertices_[id_map[to]].edges.emplace_back(id_map[to], label, id_map[from], edge_id);
+                // insert(pruned_graph.vertices_[id_map[from]].edges, id_map[from], label, id_map[to], edge_id);
+                // insert(pruned_graph.vertices_[id_map[to]].edges, id_map[to], label, id_map[from], edge_id);
                 ++edge_id;
             }
 
@@ -739,6 +758,14 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
         }
     }
     pruned_graph.set_nedges(edge_id);
+    
+// #pragma omp parallel for schedule(dynamic, 1) num_threads(32)
+    for (ui i = 0; i < pruned_graph.vertices_.size(); ++i)
+    {
+        std::sort(pruned_graph.vertices_[i].edges.begin(), pruned_graph.vertices_[i].edges.end(),  [] (const auto& lhs, const auto& rhs) {
+            return lhs.to < rhs.to;
+        });
+    }
 
     for (ui i = 0; i < pruned_graph.size(); ++i)
     {
@@ -748,6 +775,12 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
             pruned_graph.nodesByLabel[label] = vector<VertexID>();
         }
         pruned_graph.nodesByLabel[label].push_back(i);
+    }
+
+    for (auto it = pruned_graph.nodesByLabel.begin(); it != pruned_graph.nodesByLabel.end(); ++it)
+    {
+        if (pruned_graph.maxLabelFreq < it->second.size())
+            pruned_graph.maxLabelFreq = it->second.size();
     }
 
     pruned_graph.freqEdgeLabels = freqEdgeLabels;

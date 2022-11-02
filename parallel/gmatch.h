@@ -2,15 +2,18 @@
 
 #include "graph.h"
 #include "leapfrogjoin.h"
+#include "intersection/computesetintersection.h"
+
+#include "global.h"
 
 #include <algorithm>
 #include <sys/timeb.h>
 
-#define TIMEOUT_THRESHOLD 0.1 // no Timeout Search
 #define INVALID_VERTEX_ID 1000000000
 
+
 struct MatchingStatus
-{   
+{
     bool init;
     VertexID vid;
     ui v_idx;
@@ -48,6 +51,16 @@ public:
     VertexID **bn;
     ui *bn_count;
     
+    // ====================================
+    // Added from iterative-style backtrack
+
+#ifdef OPTIMIZED_MATCH
+    ui midx_count[MAX_PATTERN_SIZE];
+    ui *mtemp_buffer;
+    ui *mvalid_candidate_idx[MAX_PATTERN_SIZE];
+    bool *mvisited_array;
+#endif
+
     // =========== add from GraMi ===========
 
     timeb gtime_start;
@@ -59,6 +72,32 @@ public:
         bfs_order = NULL;
         matching_order = NULL;
         tree = NULL;
+
+#ifdef OPTIMIZED_MATCH
+
+        mtemp_buffer = new ui[grami.pruned_graph.maxLabelFreq];
+
+        for (ui i = 0; i < MAX_PATTERN_SIZE; ++i)
+        {
+            mvalid_candidate_idx[i] = new ui[grami.pruned_graph.maxLabelFreq];
+        }
+        mvisited_array = new bool[grami.pruned_graph.size()];
+        memset(mvisited_array, false, sizeof(bool)*grami.pruned_graph.size());
+#endif
+    }
+    
+    ~GMatchEngine()
+    {
+#ifdef OPTIMIZED_MATCH
+        if (mtemp_buffer != NULL)
+            delete[] mtemp_buffer;
+        for (ui i = 0; i < MAX_PATTERN_SIZE; ++i)
+        {
+            delete[] mvalid_candidate_idx[i];
+        }
+
+        delete[] mvisited_array;
+#endif
     }
 
     void set(Graph *data_graph_, Pattern *query_graph_) 
@@ -98,9 +137,11 @@ public:
     // ========== Ordering ===============
 
     void generateGQLQueryPlan(int start_vertex);
+    void generateGQLQueryPlan(int start_vertex, ui *&matching_order_);
     VertexID selectGQLStartVertex();
     void updateValidVertices(VertexID query_vertex, vector<bool> &visited, vector<bool> &adjacent);
     void generateBN();
+    void generateBN(ui *&bn_count_, ui **&bn_, ui *&matching_order_);
     void buildTable();
 
     void buildTable(Edges ***&edge_matrix_);
@@ -114,6 +155,12 @@ public:
     /** If finding one result, return true; otherwise return false. w/o using timeout and recording status */
     int backtrack(ui depth, vector<VertexID> &embedding, vector<ui> &idx_embedding,   
                                 unordered_set<VertexID> &visited, vector<ui> &counter);
+
+#ifdef OPTIMIZED_MATCH
+    /** Iterative-style backtrack until finding one result, with timeout and recording status */
+    int LFTJ(ui depth, vector<VertexID> &embedding, vector<ui> &idx_embedding,   
+                                unordered_set<VertexID> &visited, vector<ui> &counter, MatchingStatus &ms);
+#endif
 
     /** Find all results */
     void backtrackAll(ui depth, VertexID *embedding, ui *idx_embedding, unordered_set<VertexID> &visited, 
@@ -130,6 +177,18 @@ public:
     /** Find local candidates via intersection */
     void generateValidCandidateIndex(VertexID u, vector<ui> &idx_embedding, ui &valid_candidate_cnt, 
                                     vector<ui> &valid_candidate_index, VertexID *bn, ui bn_cnt);
+
+#ifdef OPTIMIZED_MATCH
+    /** Find local candidates via intersection */
+    void generateValidCandidateIndex(ui depth, vector<ui> &idx_embedding);
+#endif
+
+    // ============ Utility ====================
+    double countElaspedTime();
+
+#ifdef OPTIMIZED_MATCH
+    void resetVisitedArray(ui depth, vector<VertexID> &embedding);
+#endif
 
     // ============ Clear ======================
     void clear_all();
@@ -152,7 +211,12 @@ int GMatchEngine::execute(VertexID u, ui v_idx, vector<VertexID> &embedding, Mat
     vector<ui> counter(query_graph->size(), 0);
 
     ftime(&gtime_start);  // record starting time
+
+#ifdef OPTIMIZED_MATCH
+    int value = LFTJ(1, embedding, idx_embedding, visited, counter, ms);
+#else
     int value = backtrack(1, embedding, idx_embedding, visited, counter, ms);
+#endif
 
     return value;
 }
@@ -625,6 +689,43 @@ bool GMatchEngine::isCandidateSetValid(ui support) {
     return true;
 }
 
+void GMatchEngine::generateGQLQueryPlan(int start_vertex, ui *&matching_order_)
+{
+    /**
+     * Select the vertex v such that (1) v is adjacent to the selected vertices; and (2) v has the minimum number of candidates.
+     */
+    vector<bool> visited_vertices(query_graph->size(), false);
+    vector<bool> adjacent_vertices(query_graph->size(), false);
+    matching_order_ = new ui[query_graph->size()];
+
+    if(start_vertex == -1)
+        start_vertex = selectGQLStartVertex();
+
+    matching_order_[0] = start_vertex;
+    updateValidVertices(start_vertex, visited_vertices, adjacent_vertices);
+
+    for(ui i = 1; i < query_graph->size(); ++i) {
+        VertexID next_vertex;
+        ui min_value = data_graph->size() + 1;
+        for(ui j = 0; j < query_graph->size(); ++j) {
+            VertexID cur_vertex = j;
+
+            if (!visited_vertices[cur_vertex] && adjacent_vertices[cur_vertex]) {
+                if (query_graph->get_cands()[cur_vertex].size() < min_value) {
+                    min_value = query_graph->get_cands()[cur_vertex].size();
+                    next_vertex = cur_vertex;
+                }
+                else if (query_graph->get_cands()[cur_vertex].size() == min_value && 
+                        query_graph->get_vertex_degree(cur_vertex) > query_graph->get_vertex_degree(next_vertex)) {
+                    next_vertex = cur_vertex;
+                }
+            }
+        }
+        updateValidVertices(next_vertex, visited_vertices, adjacent_vertices);
+        matching_order_[i] = next_vertex;
+    }
+}
+
 void GMatchEngine::generateGQLQueryPlan(int start_vertex)
 {
     /**
@@ -696,6 +797,33 @@ void GMatchEngine::updateValidVertices(VertexID query_vertex, vector<bool> &visi
     for(ui i = 0; i < nbr_cnt; ++i) {
         ui nbr = query_graph->get_p_vertex(query_vertex)->edges[i].to;
         adjacent[nbr] = true;
+    }
+}
+
+void GMatchEngine::generateBN(ui *&bn_count_, ui **&bn_, ui *&matching_order_) 
+{
+    ui query_vertices_num = query_graph->size();
+    bn_count_ = new ui[query_vertices_num];
+    std::fill(bn_count_, bn_count_ + query_vertices_num, 0);
+    bn_ = new ui *[query_vertices_num];
+    for(ui i = 0; i < query_vertices_num; ++i) {
+        bn_[i] = new ui[query_vertices_num];
+    }
+
+    vector<bool> visited_vertices(query_vertices_num, false);
+    visited_vertices[matching_order_[0]] = true;
+    for(ui i = 1; i < query_vertices_num; ++i) {
+        VertexID vertex = matching_order_[i];
+
+        ui nbrs_cnt = query_graph->get_vertex_degree(vertex);
+        for(ui j = 0; j < nbrs_cnt; ++j) {
+            VertexID nbr = query_graph->get_p_vertex(vertex)->edges[j].to;
+
+            if(visited_vertices[nbr]) {
+                bn_[i][bn_count_[i]++] = nbr;
+            }
+        }
+        visited_vertices[vertex] = true;
     }
 }
 
@@ -1045,18 +1173,129 @@ int GMatchEngine::backtrack(ui depth, vector<VertexID> &embedding, vector<ui> &i
 }
 
 
+double GMatchEngine::countElaspedTime()
+{
+    struct timeb cur_time;
+    ftime(&cur_time);
+    return cur_time.time-gtime_start.time+(double)(cur_time.millitm-gtime_start.millitm)/1000;
+}
+
+
+#ifdef OPTIMIZED_MATCH
+
+void GMatchEngine::resetVisitedArray(ui depth, vector<VertexID> &embedding)
+{
+    for (ui i = 0; i <= depth; ++i)
+    {
+        mvisited_array[embedding[matching_order[i]]] = false;
+    }
+}
+
+/**
+ * iterative-style backtrack until finding one result, with timeout and recording status,
+ * and only execute once.
+ */
+int GMatchEngine::LFTJ(ui depth, vector<VertexID> &embedding, vector<ui> &idx_embedding,   
+                                unordered_set<VertexID> &visited, vector<ui> &counter, MatchingStatus &ms)
+{
+    mvisited_array[embedding[matching_order[0]]] = true;
+
+    ui cur_depth = depth;
+    ui max_depth = query_graph->size();
+
+    if (cur_depth == 0)
+    {
+        VertexID start_vertex = matching_order[cur_depth];
+        counter[cur_depth] = 0; //#### TODO:
+        midx_count[cur_depth] = query_graph->get_cands()[start_vertex].size();
+
+        for (ui i = 0; i < midx_count[cur_depth]; ++i) 
+        {
+            mvalid_candidate_idx[cur_depth][i] = i;
+        }
+    }
+    else
+    {
+        counter[cur_depth] = 0; //#### TODO: 
+        generateValidCandidateIndex(cur_depth, idx_embedding);
+    }
+
+    while (true)
+    {
+        while (counter[cur_depth] < midx_count[cur_depth])
+        {
+            ui valid_idx = mvalid_candidate_idx[cur_depth][counter[cur_depth]];
+            ui u = matching_order[cur_depth];
+            ui v = query_graph->get_cands()[u].candidate[valid_idx];
+
+            // if(visited.find(v) != visited.end()) 
+            if (mvisited_array[v])
+            {
+                counter[cur_depth] += 1;
+                continue;
+            }
+
+            embedding[u] = v;
+            idx_embedding[u] = valid_idx;
+
+            mvisited_array[v] = true;
+
+            counter[cur_depth] += 1;
+            if (cur_depth == max_depth - 1) 
+            { 
+                resetVisitedArray(cur_depth, embedding); 
+                return -1;
+            }
+
+            if (countElaspedTime() < TIMEOUT_THRESHOLD)
+            {
+                cur_depth += 1;
+                counter[cur_depth] = 0;
+                generateValidCandidateIndex(cur_depth, idx_embedding);
+            }
+            else
+            {
+                if(!ms.init)
+                {
+                    ms.init = true;
+                    ms.ffdepth = cur_depth+1;
+                    ms.counter = counter;
+                }
+                mvisited_array[v] = false;
+                resetVisitedArray(cur_depth, embedding); 
+                return -3;
+            }
+        }
+        cur_depth -= 1;
+        if (cur_depth < depth)
+            break;
+        else
+        {
+            mvisited_array[embedding[matching_order[cur_depth]]] = false;
+        }
+    }
+
+    mvisited_array[embedding[matching_order[0]]] = false;
+    return -2;
+}
+#endif
+
+
 /** 
  * backtrack until finding one result, with timeout and recording status
  */
 int GMatchEngine::backtrack(ui depth, vector<VertexID> &embedding, vector<ui> &idx_embedding,   
                                 unordered_set<VertexID> &visited, vector<ui> &counter, MatchingStatus &ms)
 {   
+    if(depth == query_graph->size()) {
+        return -1;
+    }
+
     struct timeb cur_time;
     double drun_time;
 
     ftime(&cur_time);
     drun_time = cur_time.time-gtime_start.time+(double)(cur_time.millitm-gtime_start.millitm)/1000;
-
     if(drun_time >= TIMEOUT_THRESHOLD) {
         if(!ms.init) {
             ms.init = true;
@@ -1064,9 +1303,6 @@ int GMatchEngine::backtrack(ui depth, vector<VertexID> &embedding, vector<ui> &i
             ms.counter = counter;
         }
         return -3;
-    }
-    if(depth == query_graph->size()) {
-        return -1;
     }
     else {
         VertexID u = matching_order[depth];
@@ -1218,6 +1454,7 @@ void GMatchEngine::generateValidCandidateIndex(VertexID u, ui *idx_embedding, ui
             ui *current_candidates = current_edge.edge_ + current_edge.offset_[current_index_id];
 
             vector<ui> vec(current_candidates, current_candidates+current_candidates_count);
+            
 
             vecs.push_back(vec);
         }
@@ -1256,7 +1493,7 @@ void GMatchEngine::generateValidCandidateIndex(VertexID u, vector<ui> &idx_embed
             ui *current_candidates = current_edge.edge_ + current_edge.offset_[current_index_id];
 
             vector<ui> vec(current_candidates, current_candidates+current_candidates_count);
-
+            
             vecs.push_back(vec);
         }
 
@@ -1264,6 +1501,51 @@ void GMatchEngine::generateValidCandidateIndex(VertexID u, vector<ui> &idx_embed
         valid_candidate_cnt = valid_candidate_index.size();
     }
 }
+
+
+#ifdef OPTIMIZED_MATCH
+
+void GMatchEngine::generateValidCandidateIndex(ui depth, vector<ui> &idx_embedding)
+{
+    VertexID u = matching_order[depth];
+    VertexID previous_bn = bn[depth][0];
+    ui previous_index_id = idx_embedding[previous_bn];
+    ui valid_candidates_count = 0;
+
+    Edges& previous_edge = *edge_matrix[previous_bn][u];
+
+    valid_candidates_count = previous_edge.offset_[previous_index_id + 1] - previous_edge.offset_[previous_index_id];
+    ui* previous_candidates = previous_edge.edge_ + previous_edge.offset_[previous_index_id];
+
+    memcpy(mvalid_candidate_idx[depth], previous_candidates, valid_candidates_count * sizeof(ui));
+
+    ui temp_count;
+    for (ui i = 1; i < bn_count[depth]; ++i) {
+        
+        VertexID current_bn = bn[depth][i];
+
+        Edges& current_edge = *edge_matrix[current_bn][u];
+        ui current_index_id = idx_embedding[current_bn];
+        ui current_candidates_count = current_edge.offset_[current_index_id + 1] - current_edge.offset_[current_index_id];
+        ui* current_candidates = current_edge.edge_ + current_edge.offset_[current_index_id];
+
+        if (current_candidates_count < valid_candidates_count)
+            ComputeSetIntersection::ComputeCandidates(current_candidates, current_candidates_count, mvalid_candidate_idx[depth], valid_candidates_count,
+                        mtemp_buffer, temp_count);
+        else
+            ComputeSetIntersection::ComputeCandidates(mvalid_candidate_idx[depth], valid_candidates_count, current_candidates, current_candidates_count,
+                        mtemp_buffer, temp_count);
+        
+        for(int i = 0; i < temp_count; ++i)
+        {
+            mvalid_candidate_idx[depth][i] = mtemp_buffer[i];
+        }
+        valid_candidates_count = temp_count;
+    }
+    midx_count[depth] = valid_candidates_count;
+}
+
+#endif
 
 
 /**
