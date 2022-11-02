@@ -83,32 +83,55 @@ public:
 int GraMi::initialize()
 {
     int found = 0;
-    for (ui i = 0; i < pruned_graph.size(); ++i)
+    // for (ui i = 0; i < pruned_graph.size(); ++i)
+    // {
+    //     const vertex_t *vertex = pruned_graph.get_p_vertex(i);
+    //     vLabel firstlabel = vertex->label;
+    //     int degree = vertex->edges.size();
+    //     for (ui j = 0; j < degree; j++)
+    //     {
+    //         VertexID nbrid = vertex->edges[j].to;
+    //         eLabel edgelabel = vertex->edges[j].label;
+    //         vLabel nbrlabel = pruned_graph.get_vertex_label(nbrid);
+
+    //         if(firstlabel <= nbrlabel) // Partial Pruning
+    //         {
+    //             dfs_code_t dfscode(0, 1, firstlabel, edgelabel, nbrlabel);
+    //             Pattern * pattern = new Pattern(true);
+    //             pattern->init(dfscode, NULL);
+
+    //             if (init_pattern_map.find(dfscode) == init_pattern_map.end())
+    //             {
+    //                 init_pattern_map[dfscode] = pattern;
+    //             }
+    //             else
+    //             {
+    //                 delete pattern->prog;
+    //                 delete pattern;
+    //             }
+    //         }
+    //     }
+    // }
+
+    for (auto it = pruned_graph.hashedEdges.begin(); it != pruned_graph.hashedEdges.end(); ++it)
     {
-        const vertex_t *vertex = pruned_graph.get_p_vertex(i);
-        vLabel firstlabel = vertex->label;
-        int degree = vertex->edges.size();
-        for (ui j = 0; j < degree; j++)
+        auto pv = it->first;
+        vLabel from_label = pv.from_label, to_label = pv.to_label;
+        eLabel edge_label = pv.edge_label;
+        if (from_label <= to_label) // Partial Pruning
         {
-            VertexID nbrid = vertex->edges[j].to;
-            eLabel edgelabel = vertex->edges[j].label;
-            vLabel nbrlabel = pruned_graph.get_vertex_label(nbrid);
+            dfs_code_t dfscode(0, 1, from_label, edge_label, to_label);
+            Pattern * pattern = new Pattern(true);
+            pattern->init(dfscode, NULL);
 
-            if(firstlabel <= nbrlabel) // Partial Pruning
+            if (init_pattern_map.find(dfscode) == init_pattern_map.end())
             {
-                dfs_code_t dfscode(0, 1, firstlabel, edgelabel, nbrlabel);
-                Pattern * pattern = new Pattern(true);
-                pattern->init(dfscode, NULL);
-
-                if (init_pattern_map.find(dfscode) == init_pattern_map.end())
-                {
-                    init_pattern_map[dfscode] = pattern;
-                }
-                else
-                {
-                    delete pattern->prog;
-                    delete pattern;
-                }
+                init_pattern_map[dfscode] = pattern;
+            }
+            else
+            {
+                delete pattern->prog;
+                delete pattern;
             }
         }
     }
