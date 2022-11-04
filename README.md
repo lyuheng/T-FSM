@@ -8,7 +8,7 @@ Under the root directory of the project, execute the following commands to compi
 cd T-FSM/serial
 make
 ```
-Run serial FSM using the following command.
+Run serial FSM using the following command. All frequent patterns are stored in grami_results.txt.
 ```
 ./run -file [GRAPHPATH] -freq [F] -maxNodes [MAXNODE]
 ```
