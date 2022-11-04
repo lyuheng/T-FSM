@@ -44,7 +44,7 @@ public:
     GraMi(int nsupport) : nsupport_(nsupport), pruned_graph(nsupport)
     {
         char file[20];
-        strcpy(file, "./GraMi_results.txt");
+        strcpy(file, "./grami_results.txt");
         fout.open(file);
         total_num = 0;
     }
