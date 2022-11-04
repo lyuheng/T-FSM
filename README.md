@@ -33,7 +33,7 @@ cd T-FSM/parallel
 make
 ```
 
-Run serial FSM using the following command.
+Run parallel FSM using the following command.
 ```
 ./run -file [GRAPHPATH] -freq [F] -thread [T] -maxNodes [MAXNODE]
 ```
@@ -69,13 +69,13 @@ GRAPHPATH: required, the input graph path
 
 F: required, the user-given support threshold, in terms of Fraction-Score metric
 
-T: required, the number of threads
+T: required, the number of threads, 32 by default
 
 MAXNODE: optional, parameter to constrain the maximum subgraph size (number of vertices)
 
 ## Input
 
-Input graph starts with 't N M' where N is the number of vertices and M is the number of edges. A vertex and an edge are formatted as 'v VertexID VertexLabel Degree' and 'e VertexID VertexID EdgeLabel' respectively. Note that we require that the vertexID starts from 0 and the range is [0,N - 1] where V is the vertex set. If the input graph is not edge-labelled, mark all edge labels as 1. The following is an input sample
+Input graph starts with 't N M' where N is the number of vertices and M is the number of edges. A vertex and an edge are formatted as 'v VertexID VertexLabel Degree' and 'e VertexID VertexID EdgeLabel' respectively. Note that we require that the vertexID starts from 0 and the range is [0,|V| - 1] where V is the vertex set. If the input graph is not edge-labelled, mark all edge labels as 1. The following is an input sample
 ```
 t 5 6
 v 0 0 2
