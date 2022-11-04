@@ -105,21 +105,23 @@ public:
     int nedges_;
     Vertices vertices_;
 
+    ui maxLabelFreq;
+
     unordered_map<vLabel, vector<VertexID>> nodesByLabel; // nodesByLabel[vLabel] = list of v-ids with vLabel
 
     unordered_set<eLabel> freqEdgeLabels;
 
+    // unordered_map<string, EdgeCandidate> hashedEdges;
+
     unordered_map<PairVertices, EdgeCandidate, PairVerticesHashCode> hashedEdges;
 
-    unordered_map<vLabel, int> *nlf;
 
-
-    Graph() : nedges_(0)
+    Graph() : nedges_(0), maxLabelFreq(0)
     {
         vertices_.resize(0);
     }
 
-    Graph(int support) : nedges_(0), nsupport_(support)
+    Graph(int support) : nedges_(0), maxLabelFreq(0), nsupport_(support)
     {
         vertices_.resize(0);
     }
@@ -207,7 +209,7 @@ public:
 
     eLabel get_edge_label(VertexID u, VertexID v);
 
-    void build_nlf();
+    void build_nlf(unordered_map<vLabel, int> *nlf);
 
     void toGraph(Pattern &pattern);
 };
@@ -455,11 +457,11 @@ public:
         return get_p_vertex(index)->label;
     }
 
-    void insert(EdgeType &edges, VertexID from, eLabel edge_label, VertexID to, ui edgeId);
-
     void add_edge(dfs_code_t &dfscode);
     void buildRMPath();
     void extend(dfs_code_t &dfscode);
+    
+    void insert(EdgeType &edges, VertexID from, eLabel edge_label, VertexID to, ui edgeId);
 
     bool is_acyclic();
     bool distinct_labels();
@@ -489,9 +491,6 @@ void Graph::load_graph(Graph &pruned_graph, const string &input_file, const stri
     construct_graph(input, edgesByLabel);
     find_frequent_labels(edgesByLabel, freqNodeLabels);
     construct_freq_graph(pruned_graph, input, edgesByLabel, freqNodeLabels);
-
-    pruned_graph.nlf = new unordered_map<vLabel, int>[pruned_graph.size()];
-    pruned_graph.build_nlf();
 }
 
 void Graph::read_input(const string &input_file, const string &separator, vector<vector<string>> &input)
@@ -550,7 +549,7 @@ void Graph::construct_graph(vector<vector<string>> &input, unordered_map<eLabel,
         }
         else
         {
-            std::cout << "Reading input error!" << std::endl;
+            std::cout << "Reading input error! " << std::endl;
         }
     }
 
@@ -559,10 +558,10 @@ void Graph::construct_graph(vector<vector<string>> &input, unordered_map<eLabel,
     for (ui i = 0; i < size(); ++i)
     {
 
-        // std::sort(vertices_[i].edges.begin(), vertices_[i].edges.end(), [](const edge_t &a, const edge_t &b)
-        // { 
-        //     return a.to < b.to;  // ascending order 
-        // });
+        std::sort(vertices_[i].edges.begin(), vertices_[i].edges.end(), [](const edge_t &a, const edge_t &b)
+        { 
+            return a.to < b.to;  // ascending order 
+        });
 
         int degree = get_vertex_degree(i);
         vLabel label = vertices_[i].label;
@@ -637,6 +636,7 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
         }
         else if (input[i][0] == "e")
         {
+
             VertexID from = atoi(input[i][1].c_str());
             VertexID to = atoi(input[i][2].c_str());
             eLabel label = atoi(input[i][3].c_str()); // SHIXUAN INPUT;
@@ -652,6 +652,12 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
                 pruned_graph.vertices_[id_map[to]].edges.emplace_back(id_map[to], label, id_map[from], edge_id);
                 ++edge_id;
             }
+
+            string sig;
+            if (label_from <= label_to)
+                sig = std::to_string(label_from) + "_" + std::to_string(label) + "_" + std::to_string(label_to);
+            else
+                sig = std::to_string(label_to) + "_" + std::to_string(label) + "_" + std::to_string(label_from);
 
             PairVertices pv;
             if(label_from < label_to)
@@ -677,10 +683,17 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
         }
         else
         {
-            std::cout << "Reading input error!" << std::endl;
+            std::cout << "Reading input error! " << std::endl;
         }
     }
     pruned_graph.set_nedges(edge_id);
+
+    for (ui i = 0; i < pruned_graph.vertices_.size(); ++i)
+    {
+        std::sort(pruned_graph.vertices_[i].edges.begin(), pruned_graph.vertices_[i].edges.end(),  [] (const auto& lhs, const auto& rhs) {
+            return lhs.to < rhs.to;
+        });
+    }
 
     for (ui i = 0; i < pruned_graph.size(); ++i)
     {
@@ -692,11 +705,20 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
         pruned_graph.nodesByLabel[label].push_back(i);
     }
 
+
+    for (auto it = pruned_graph.nodesByLabel.begin(); it != pruned_graph.nodesByLabel.end(); ++it)
+    {
+        if (pruned_graph.maxLabelFreq < it->second.size())
+            pruned_graph.maxLabelFreq = it->second.size();
+    }
+
     pruned_graph.freqEdgeLabels = freqEdgeLabels;
 
     // prune infrequent hasdedEdges
     for (auto it = pruned_graph.hashedEdges.begin(); it != pruned_graph.hashedEdges.end();)
     {
+        // string str = it->first;
+
         if (it->second.candA.size() < nsupport_ || it->second.candB.size() < nsupport_)
         {
             it = pruned_graph.hashedEdges.erase(it);
@@ -753,41 +775,9 @@ void Graph::toGraph(Pattern &pattern)
     set_nedges(pattern.edge_id);
 }
 
-void Graph::build_nlf()
-{
-    for (ui i = 0; i < size(); ++i)
-    {
-        ui degree = get_p_vertex(i)->edges.size();
-        for (ui j = 0; j < degree; ++j)
-        {
-            VertexID nbr = get_p_vertex(i)->edges[j].to;
-            vLabel label = get_vertex_label(nbr);
-            if (nlf[i].find(label) == nlf[i].end())
-            {
-                nlf[i][label] = 0;
-            }
-            nlf[i][label] += 1;
-        }
-    }
-}
-
 // ########################################################################################
 // =========================== below are Pattern methods ==================================
 // ########################################################################################
-
-void Pattern::insert(EdgeType &edges, VertexID from, eLabel edge_label, VertexID to, ui edgeId)
-{
-    auto it = edges.begin();
-    for ( ; it != edges.end(); ++it)
-    {
-        if(it->to > to)
-        {
-            edges.emplace(it, from, edge_label, to, edgeId);
-            return;
-        }
-    }
-    edges.emplace(it, from, edge_label, to, edgeId);
-}
 
 void Pattern::buildRMPath()
 {
@@ -833,8 +823,10 @@ void Pattern::add_edge(dfs_code_t &dfscode)
         if (from_id < vertex_id && to_id < vertex_id)
         {
             // backward edge
-            vertices_[from_id].edges.emplace_back(from_id, dfscode.edge_label, to_id, edge_id);
-            vertices_[to_id].edges.emplace_back(to_id, dfscode.edge_label, from_id, edge_id);
+            // vertices_[from_id].edges.emplace_back(from_id, dfscode.edge_label, to_id, edge_id);
+            // vertices_[to_id].edges.emplace_back(to_id, dfscode.edge_label, from_id, edge_id);
+            insert(vertices_[from_id].edges, from_id, dfscode.edge_label, to_id, edge_id);
+            insert(vertices_[to_id].edges, to_id, dfscode.edge_label, from_id, edge_id);
             edge2vertex[edge_id] = vertices_[from_id].edges.back();
             edge_id++;
         }
@@ -842,13 +834,29 @@ void Pattern::add_edge(dfs_code_t &dfscode)
         {
             // forward edge
             vertices_.emplace_back(to_id, dfscode.to_label);
-            vertices_[from_id].edges.emplace_back(from_id, dfscode.edge_label, to_id, edge_id);
-            vertices_[to_id].edges.emplace_back(to_id, dfscode.edge_label, from_id, edge_id);
+            // vertices_[from_id].edges.emplace_back(from_id, dfscode.edge_label, to_id, edge_id);
+            // vertices_[to_id].edges.emplace_back(to_id, dfscode.edge_label, from_id, edge_id);
+            insert(vertices_[from_id].edges, from_id, dfscode.edge_label, to_id, edge_id);
+            insert(vertices_[to_id].edges, to_id, dfscode.edge_label, from_id, edge_id);
             edge2vertex[edge_id] = vertices_[from_id].edges.back();
             vertex_id++;
             edge_id++;
         }
     }
+}
+
+void Pattern::insert(EdgeType &edges, VertexID from, eLabel edge_label, VertexID to, ui edgeId)
+{
+    auto it = edges.begin();
+    for ( ; it != edges.end(); ++it)
+    {
+        if(it->to > to)
+        {
+            edges.emplace(it, from, edge_label, to, edgeId);
+            return;
+        }
+    }
+    edges.emplace(it, from, edge_label, to, edgeId);
 }
 
 void Pattern::build_nlf(unordered_map<vLabel, int> *nlf)

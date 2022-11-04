@@ -9,6 +9,7 @@
 
 #include <map>
 #include <fstream>
+#include <assert.h>
 
 using std::ofstream;
 
@@ -222,14 +223,14 @@ void GraMi::extend(Pattern &pattern, PatternVec &ext_pattern_vec)
 
 void GraMi::project()
 {   
+    gmatch_engine.initialize_space(pruned_graph.maxLabelFreq, pruned_graph.size());
     initialize();
+    
     for (auto it = init_pattern_map.begin(); it != init_pattern_map.end(); ++it)
     {   
         mine_subgraph(it->second);
     }
     cout << "[RESULT] # Frequent Patterns: " << total_num << endl;
-
-    delete[] pruned_graph.nlf;
 }
 
 void GraMi::mine_subgraph(Pattern &pattern)
@@ -274,11 +275,6 @@ int GraMi::frequency(Pattern &pattern)
 
         if (pruned_graph.hashedEdges.find(pv) == pruned_graph.hashedEdges.end())
             return 0;
-        else
-        {
-            EdgeCandidate & edge_cand = pruned_graph.hashedEdges[pv];
-            return std::min(edge_cand.candA.size(), edge_cand.candB.size());
-        }
     }
 
     // push-down pruning, decompose
@@ -351,7 +347,7 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
         // special case
         // Do arc pruning until reaching consistency
         gmatch_engine.set(&pruned_graph, &pattern);
-        gmatch_engine.filterToConsistency(nsupport_);
+        gmatch_engine.filterToConsistency();
         // gmatch_engine.clear_filter();
         gmatch_engine.reset();
 
@@ -368,7 +364,7 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
         // special case
         // Do arc pruning until reaching consistency
         gmatch_engine.set(&pruned_graph, &pattern);
-        gmatch_engine.filterToConsistency(nsupport_);
+        gmatch_engine.filterToConsistency();
         // gmatch_engine.clear_filter();
         gmatch_engine.reset();
 
@@ -397,7 +393,10 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
 
     // Now do the search
     gmatch_engine.set(&pruned_graph, &pattern);
-    if(!gmatch_engine.DPisoFilter(false, nsupport_)) // degree-based pruning.
+    if(!gmatch_engine.DPisoFilter(false)) // degree-based pruning.
+        return;
+
+    if(get_domain_minsize(pattern) < nsupport_)
     {
         gmatch_engine.reset();
         return;
@@ -407,8 +406,6 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
 
     vector<MatchingStatus> status_vector;
 
-    // auto pre_non_candidates = pattern.non_candidates; // deep copy
-
     for (int i = pattern.size() - 1; i >= 0; --i)
     {
         bool search = true;
@@ -416,6 +413,8 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
         if (i != pre_idx)
         {
             search = false;
+
+            // pattern.candidates[i] = pattern.candidates[pre_idx]; // deep copy, temporarily not supported
             found_results[i] = found_results[pre_idx]; // deep copy
         }
         if (search)
@@ -427,7 +426,8 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
 
             for (auto it = pattern.candidates[i].candidate.begin(); it != pattern.candidates[i].candidate.end(); ++it, ++idx)
             {
-                if (found_results[i].find(*it) != found_results[i].end())
+                if (found_results[i].find(*it) != found_results[i].end() || 
+                    pattern.non_candidates[i].find(*it) != pattern.non_candidates[i].end())
                 {
                     continue;
                 }
@@ -451,15 +451,6 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
                     for (auto auto_node : auto_nodes)
                     {
                         pattern.non_candidates[auto_node].insert(*it);
-
-                        // # fail > # total - support
-                        // if(pattern.non_candidates[auto_node].size() - pre_non_candidates[auto_node].size() > pattern.candidates[auto_node].size() - nsupport_)
-                        // {
-                        //     gmatch_engine.clear_table();
-                        //     gmatch_engine.clear_match();
-                        //     gmatch_engine.reset();
-                        //     return;
-                        // }
                     }
                 }
                 else if (value == -1)
@@ -497,15 +488,11 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
             {
                 if (found_results[i].size() + status_vector.size() - j < nsupport_)
                 {   // quick check
-                    gmatch_engine.clear_table();
-                    gmatch_engine.clear_match();
-                    gmatch_engine.reset();
                     return;
                 }
 
                 bool existence = true;
                 MatchingStatus &ms = status_vector[j];
-
 
                 for (ui k = 0; k < maps.size(); ++k)
                 {
@@ -516,7 +503,7 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
                         vector<VertexID> &subgraph_mappings = (*it).mapping;
                         ui subgraph_size = key.size();
 
-                        // search mappings of i
+                        // serach mappings of i
                         int map_index = search_mapping(subgraph_mappings, i);
 
                         if (map_index == -1)
@@ -549,6 +536,7 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
 
                 if (!existence)
                     continue;
+                
 
                 // continue the search
                 vector<VertexID> embedding(pattern.size());
@@ -561,15 +549,6 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
                     for (auto auto_node : auto_nodes)
                     {
                         pattern.non_candidates[auto_node].insert(ms.vid);
-
-                        // # fail > # total - support
-                        // if(pattern.non_candidates[auto_node].size() - pre_non_candidates[auto_node].size() > pattern.candidates[auto_node].size() - nsupport_)
-                        // {
-                        //     gmatch_engine.clear_table();
-                        //     gmatch_engine.clear_match();
-                        //     gmatch_engine.reset();
-                        //     return;
-                        // }
                     }
                 }
                 else
@@ -605,17 +584,17 @@ void GraMi::find_existence(Pattern &pattern, VectorOfSet &found_results)
     // remove non_candidates from candidates
     for(ui i = 0; i < pattern.size(); ++i) 
     {
-        auto & cands = pattern.candidates[i].candidate;
-        auto & non_cands = pattern.non_candidates[i];
-        vector<VertexID> new_cands;
-        for(auto it = cands.begin(); it != cands.end(); ++it)
+        for(auto it = pattern.candidates[i].candidate.begin(); it != pattern.candidates[i].candidate.end(); )
         {
-            if(non_cands.find(*it) == non_cands.end())
+            if(pattern.non_candidates[i].find(*it) != pattern.non_candidates[i].end())
             {
-                new_cands.push_back(*it);
+                it = pattern.candidates[i].candidate.erase(it);
+            }
+            else
+            {
+                ++it;
             }
         }
-        cands.swap(new_cands);
     }
 }
 
@@ -692,6 +671,7 @@ bool GraMi::isCan(Pattern &pattern)
 
 void GraMi::verify(Pattern &pattern)
 {   
+
     for (ui i = 0; i < pattern.size(); ++i)
     {
         vertex_t *vertex = pattern.get_p_vertex(i);

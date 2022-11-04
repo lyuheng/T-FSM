@@ -17,6 +17,8 @@ public:
     void decompose(Pattern &pattern, vector<vector<subPattern> > &mappings);
 
     int indexOf(vector<VertexID> &vec, VertexID u);
+
+    void insert(EdgeType &vec, VertexID from, eLabel edge_label, VertexID to, ui edgeId);
 };
 
 void Decompose::decompose(Pattern &pattern, vector<vector<subPattern> > &mappings)
@@ -39,7 +41,7 @@ void Decompose::decompose(Pattern &pattern, vector<vector<subPattern> > &mapping
         {
             if (color[j])
                 continue;
-
+                
             subPattern sub_pattern;
             EdgeID &edgeId = sub_pattern.pattern.edge_id;
             edgeId = 0;
@@ -79,15 +81,17 @@ void Decompose::decompose(Pattern &pattern, vector<vector<subPattern> > &mapping
                         sub_pattern.mapping.push_back(nbr);
                     }
                     eLabel edge_label = pattern.get_p_vertex(currentNode)->edges[k].label;
-                    sub_pattern.pattern.vertices_[currentNode_id].edges.emplace_back(currentNode_id, edge_label, nbr_id, edgeId);
-                    sub_pattern.pattern.vertices_[nbr_id].edges.emplace_back(nbr_id, edge_label, currentNode_id, edgeId);
+                    // sub_pattern.pattern.vertices_[currentNode_id].edges.emplace_back(currentNode_id, edge_label, nbr_id, edgeId);
+                    // sub_pattern.pattern.vertices_[nbr_id].edges.emplace_back(nbr_id, edge_label, currentNode_id, edgeId);
+                    insert(sub_pattern.pattern.vertices_[currentNode_id].edges, currentNode_id, edge_label, nbr_id, edgeId);
+                    insert(sub_pattern.pattern.vertices_[nbr_id].edges, nbr_id, edge_label, currentNode_id, edgeId);
                     sub_pattern.pattern.edge2vertex[edgeId] = sub_pattern.pattern.vertices_[currentNode_id].edges.back();
 
                     DFSstack.push_front(nbr);
                     edgeId++;
                 }
             }
-            if (sub_pattern.pattern.size() > 1 && indexOf(sub_pattern.mapping, pattern.size() - 1) >= 0) 
+            if (sub_pattern.pattern.size() > 1 && indexOf(sub_pattern.mapping, pattern.size() - 1) >= 0)
             {
                 currentEdgeMappings.push_back(sub_pattern);
             }
@@ -107,4 +111,19 @@ int Decompose::indexOf(vector<VertexID> &vec, VertexID u)
             return i;
     }
     return -1;
+}
+
+
+void Decompose::insert(EdgeType &vec, VertexID from, eLabel edge_label, VertexID to, ui edgeId)
+{   
+    auto it = vec.begin();
+    for ( ; it != vec.end(); ++it)
+    {
+        if(it->to > to)
+        {
+            vec.emplace(it, from, edge_label, to, edgeId);
+            return;
+        } 
+    }
+    vec.emplace(it, from, edge_label, to, edgeId);
 }

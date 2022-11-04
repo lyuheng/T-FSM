@@ -30,11 +30,10 @@ int main(int argc, char *argv[])
 	else
 		Settings::maxNumNodes = -1;
 
-
     GraMi grami(support);
     Graph graph(support);
 
-    graph.load_graph(grami.pruned_graph, fileName, " "); // separated by space
+    graph.load_graph(grami.pruned_graph, argv[2], " "); // separated by space
 
     grami.project();
 

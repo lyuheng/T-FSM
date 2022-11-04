@@ -20,7 +20,8 @@ struct RootForwardEdge
 			if (e1.elabel != e2.elabel) 
 				return e1.elabel < e2.elabel;
 			else 
-				return e1.toLabel < e2.toLabel;	
+				return e1.toLabel < e2.toLabel;
+				
 		}
 	}
 
