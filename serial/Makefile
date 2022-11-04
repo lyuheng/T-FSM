@@ -1,10 +1,10 @@
 CCOMPILE=g++
-CPPFLAGS= -O2
+CPPFLAGS=-O3 -march=native
 
 all: run
 
 run: run.cpp
-	$(CCOMPILE) -g -std=c++11 run.cpp $(CPPFLAGS)  -o run
+	$(CCOMPILE) -std=c++14 run.cpp intersection/computesetintersection.cpp $(CPPFLAGS)  -o run
 
 clean:
 	-rm run
