@@ -27,7 +27,7 @@ Use the following command:
 ```
 
 ## Parallel Version
-Under the root directory of the project, execute the following commands to complie.
+Under the root directory of the project, execute the following commands to complie. If the mined patterns are large (>=6 vertices), we highly suggest users enable #OPTIMIZED_MATCH option, which consumes slightly more memory. All frequent patterns are printed with #VERBOSE enabled.
 ```
 cd T-FSM/parallel
 make
