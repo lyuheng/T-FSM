@@ -14,10 +14,28 @@
 #include "rwlock.h"
 #include "taskprogmap.h"
 
+#include "grami.h"
+
 using namespace std;
 
 #define WAIT_TIME_WHEN_IDLE 100000
-#define DECOMPOSE_TIME_THRESHOLD 1 // time threshold for decomposing tasks for timeout task
+
+// enable printing all found frequent patterns
+#define VERBOSE_MODE
+
+// enable optimized version of subgraph matching methods
+#define OPTIMIZED_MATCH
+
+// enable timeout search
+#define TIMEOUT_THRESHOLD 0.1
+
+// enable time threshold for decomposing tasks for timeout task
+#define DECOMPOSE_TIME_THRESHOLD 1
+
+// Set max vertex sizes of mined patterns
+#define MAX_PATTERN_SIZE 32
+
+
 
 #define SEQNO_LIMIT 9223372036854775807
 

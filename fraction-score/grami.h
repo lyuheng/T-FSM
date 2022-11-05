@@ -1,7 +1,6 @@
 #pragma once
 
 #include "graph.h"
-#include "gmatch.h"
 #include "decompose.h"
 #include "pretty_print.h"
 #include "canonical.h"
@@ -31,9 +30,9 @@ public:
 
     unordered_map<vLabel, unordered_set<vLabel>> neighbor_labels;
 
-    GMatchEngine auto_engine;   // automorphisms
-    GMatchEngine gmatch_engine; // subgraph matching
-    GMatchEngine exist_engine;  // check existence
+    // GMatchEngine auto_engine;   // automorphisms
+    // GMatchEngine gmatch_engine; // subgraph matching
+    // GMatchEngine exist_engine;  // check existence
 
     Decompose decomposer;
 
@@ -84,32 +83,55 @@ public:
 int GraMi::initialize()
 {
     int found = 0;
-    for (ui i = 0; i < pruned_graph.size(); ++i)
+    // for (ui i = 0; i < pruned_graph.size(); ++i)
+    // {
+    //     const vertex_t *vertex = pruned_graph.get_p_vertex(i);
+    //     vLabel firstlabel = vertex->label;
+    //     int degree = vertex->edges.size();
+    //     for (ui j = 0; j < degree; j++)
+    //     {
+    //         VertexID nbrid = vertex->edges[j].to;
+    //         eLabel edgelabel = vertex->edges[j].label;
+    //         vLabel nbrlabel = pruned_graph.get_vertex_label(nbrid);
+
+    //         if(firstlabel <= nbrlabel) // Partial Pruning
+    //         {
+    //             dfs_code_t dfscode(0, 1, firstlabel, edgelabel, nbrlabel);
+    //             Pattern * pattern = new Pattern(true);
+    //             pattern->init(dfscode, NULL);
+
+    //             if (init_pattern_map.find(dfscode) == init_pattern_map.end())
+    //             {
+    //                 init_pattern_map[dfscode] = pattern;
+    //             }
+    //             else
+    //             {
+    //                 delete pattern->prog;
+    //                 delete pattern;
+    //             }
+    //         }
+    //     }
+    // }
+
+    for (auto it = pruned_graph.hashedEdges.begin(); it != pruned_graph.hashedEdges.end(); ++it)
     {
-        const vertex_t *vertex = pruned_graph.get_p_vertex(i);
-        vLabel firstlabel = vertex->label;
-        int degree = vertex->edges.size();
-        for (ui j = 0; j < degree; j++)
+        auto pv = it->first;
+        vLabel from_label = pv.from_label, to_label = pv.to_label;
+        eLabel edge_label = pv.edge_label;
+        if (from_label <= to_label) // Partial Pruning
         {
-            VertexID nbrid = vertex->edges[j].to;
-            eLabel edgelabel = vertex->edges[j].label;
-            vLabel nbrlabel = pruned_graph.get_vertex_label(nbrid);
+            dfs_code_t dfscode(0, 1, from_label, edge_label, to_label);
+            Pattern * pattern = new Pattern(true);
+            pattern->init(dfscode, NULL);
 
-            if(firstlabel <= nbrlabel) // Partial Pruning
+            if (init_pattern_map.find(dfscode) == init_pattern_map.end())
             {
-                dfs_code_t dfscode(0, 1, firstlabel, edgelabel, nbrlabel);
-                Pattern * pattern = new Pattern(true);
-                pattern->init(dfscode, NULL);
-
-                if (init_pattern_map.find(dfscode) == init_pattern_map.end())
-                {
-                    init_pattern_map[dfscode] = pattern;
-                }
-                else
-                {
-                    delete pattern->prog;
-                    delete pattern;
-                }
+                init_pattern_map[dfscode] = pattern;
+            }
+            else
+            {
+                delete pattern->prog;
+                delete pattern;
             }
         }
     }
@@ -147,7 +169,6 @@ int GraMi::initialize()
 }
 
 
-/** rightmost extension */
 void GraMi::extend(Pattern &pattern, PatternPVec &ext_pattern_vec)
 {
     VertexID last_id = pattern.size() - 1;
@@ -172,7 +193,7 @@ void GraMi::extend(Pattern &pattern, PatternPVec &ext_pattern_vec)
                     new_pattern->copy(pattern);
                     new_pattern->extend(dfs_code);
 
-                    if(isCan(*new_pattern))
+                    if (isCan(*new_pattern))
                     {
                         ext_pattern_vec.push_back(new_pattern);
                     }
@@ -232,7 +253,7 @@ void GraMi::extend(Pattern &pattern, PatternPVec &ext_pattern_vec)
         }
     }
 
-    if(Settings::maxNumNodes == -1 || pattern.size() < Settings::maxNumNodes)
+    if (Settings::maxNumNodes == -1 || pattern.size() < Settings::maxNumNodes)
     {
         for (ui i = 0; i < pattern.right_most_path.size(); ++i)
         {
@@ -273,7 +294,7 @@ void GraMi::extend(Pattern &pattern, PatternPVec &ext_pattern_vec)
 }
 
 
-/** #############obsolete!!!!!!!!!!!!!! */
+/** rightmost extension */
 void GraMi::extend(Pattern &pattern, PatternVec &ext_pattern_vec)
 {
     VertexID last_id = pattern.size() - 1;

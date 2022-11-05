@@ -15,14 +15,13 @@
 #include <omp.h>
 
 #include "types.h"
-#include "conmap.h"
 
-// #define USE_CONMAP 
 #define FILE_MAX_LINE 1024
 #define INVALID_EDGE_LABEL 1000000000
 
 using namespace std;
 using namespace std::chrono;
+
 
 class Pattern;
 class subPattern;
@@ -104,47 +103,6 @@ struct EdgeCandidate
     unordered_set<VertexID> candA, candB;
 };
 
-
-struct FractionKey
-{
-    VertexID id;
-    vLabel label;
-
-    FractionKey(VertexID id_, vLabel label_): id(id_), label(label_)
-    {
-    }
-
-    ui operator %(const ui & d) const
-    {
-        size_t seed = 0;
-        hash_combine(seed, id);
-        hash_combine(seed, label);
-        return seed % d;
-    }
-
-    bool operator==(const FractionKey & key) const
-    {
-        return (id == key.id) && (label == key.label);
-    }
-};
-
-typedef conmap<FractionKey, double>::bucket bucketFD;
-typedef conmap<FractionKey, double>::bucket_map bucket_mapFD;
-
-namespace __gnu_cxx {
-template <>
-struct hash<FractionKey> {
-    size_t operator()(FractionKey key) const
-    {
-        size_t seed = 0;
-        hash_combine(seed, key.id);
-        hash_combine(seed, key.label);
-        return seed;
-    }
-};
-}
-
-
 class Graph
 {
 public:
@@ -156,6 +114,8 @@ public:
     int nedges_;
     Vertices vertices_;
 
+    ui maxLabelFreq;
+
     unordered_map<vLabel, vector<VertexID> > nodesByLabel; // nodesByLabel[vLabel] = list of v-ids with vLabel
 
     unordered_set<eLabel> freqEdgeLabels;
@@ -166,19 +126,14 @@ public:
 
     unordered_map<vLabel, int> *nlf;
 
-#ifdef USE_CONMAP
-    conmap<FractionKey, double> vtx_frac; 
-    vector<unordered_map<vLabel, double> > vtx_frac_rd; // read_only
-#else 
     vector<unordered_map<vLabel, double> > vtx_frac;
-#endif
 
-    Graph() : nedges_(0)
+    Graph() : nedges_(0), maxLabelFreq(0)
     {
         vertices_.resize(0);
     }
 
-    Graph(int support) : nedges_(0), nsupport_(support)
+    Graph(int support) : nedges_(0), maxLabelFreq(0), nsupport_(support)
     {
         vertices_.resize(0);
     }
@@ -271,6 +226,21 @@ public:
     void toGraph(Pattern &pattern);
 
     void compute_fraction_score();
+
+    void insert(EdgeType &vec, VertexID from, eLabel edge_label, VertexID to, ui edgeId)
+    {   
+        auto it = vec.begin();
+        for ( ; it != vec.end(); ++it)
+        {
+            if(it->to > to)
+            {
+                vec.emplace(it, from, edge_label, to, edgeId);
+                return;
+            }
+        }
+        
+        vec.emplace(it, from, edge_label, to, edgeId);
+    }
 };
 
 // DFS Code
@@ -754,6 +724,8 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
 
                 pruned_graph.vertices_[id_map[from]].edges.emplace_back(id_map[from], label, id_map[to], edge_id);
                 pruned_graph.vertices_[id_map[to]].edges.emplace_back(id_map[to], label, id_map[from], edge_id);
+                // insert(pruned_graph.vertices_[id_map[from]].edges, id_map[from], label, id_map[to], edge_id);
+                // insert(pruned_graph.vertices_[id_map[to]].edges, id_map[to], label, id_map[from], edge_id);
                 ++edge_id;
             }
 
@@ -785,6 +757,14 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
         }
     }
     pruned_graph.set_nedges(edge_id);
+    
+#pragma omp parallel for schedule(dynamic, 1) num_threads(32)
+    for (ui i = 0; i < pruned_graph.vertices_.size(); ++i)
+    {
+        std::sort(pruned_graph.vertices_[i].edges.begin(), pruned_graph.vertices_[i].edges.end(),  [] (const auto& lhs, const auto& rhs) {
+            return lhs.to < rhs.to;
+        });
+    }
 
     for (ui i = 0; i < pruned_graph.size(); ++i)
     {
@@ -796,18 +776,26 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
         pruned_graph.nodesByLabel[label].push_back(i);
     }
 
+    for (auto it = pruned_graph.nodesByLabel.begin(); it != pruned_graph.nodesByLabel.end(); ++it)
+    {
+        if (pruned_graph.maxLabelFreq < it->second.size())
+            pruned_graph.maxLabelFreq = it->second.size();
+    }
+
     pruned_graph.freqEdgeLabels = freqEdgeLabels;
 
+    // Do Fraction-Score preprocessing
     pruned_graph.nlf = new unordered_map<vLabel, int>[pruned_graph.size()];
     pruned_graph.build_nlf();
-
     pruned_graph.compute_fraction_score();
+
 
     // prune infrequent hasdedEdges
     for (auto it = pruned_graph.hashedEdges.begin(); it != pruned_graph.hashedEdges.end();)
     {
         if (it->second.candA.size() < nsupport_ || it->second.candB.size() < nsupport_)
-        {
+        {    
+            // cout << it->first.from_label << " " << it->first.to_label << ": " << min(it->second.candA.size(), it->second.candB.size()) << endl;
             it = pruned_graph.hashedEdges.erase(it);
         }
         else
@@ -816,18 +804,7 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
             for (VertexID v: it->second.candA)
             {
                 vLabel label = it->first.to_label;
-
-#ifdef USE_CONMAP
-                // FractionKey key(v, label);
-                // bucketFD & bucket = pruned_graph.vtx_frac.get_bucket(key);
-                // bucket_mapFD & kvmap = bucket.get_map();
-                // sup_a += kvmap[key];
-                sup_a += pruned_graph.vtx_frac_rd[v][label];
-
-#else
-
                 sup_a += pruned_graph.vtx_frac[v][label];
-#endif
             }
             if (sup_a < nsupport_)
             {
@@ -838,17 +815,7 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
             for (VertexID v: it->second.candB)
             {
                 vLabel label = it->first.from_label;
-
-#ifdef USE_CONMAP
-                // FractionKey key(v, label);
-                // bucketFD & bucket = pruned_graph.vtx_frac.get_bucket(key);
-                // bucket_mapFD & kvmap = bucket.get_map();
-                // sup_b += kvmap[key];
-                sup_b += pruned_graph.vtx_frac_rd[v][label];
-
-#else
                 sup_b += pruned_graph.vtx_frac[v][label];
-#endif
             }
             if (sup_b < nsupport_)
             {
@@ -858,6 +825,7 @@ void Graph::construct_freq_graph(Graph &pruned_graph, vector<vector<string>> &in
             ++it;
         }
     }
+    // cout << pruned_graph.hashedEdges.size() << "############# " << endl;
 }
 
 eLabel Graph::get_edge_label(VertexID u, VertexID v)
@@ -923,63 +891,11 @@ void Graph::build_nlf()
     }
 }
 
-/**
- * conduct this function after nlf
- */
-#ifdef USE_CONMAP
-void Graph::compute_fraction_score()
-{ 
 
-    auto time1 = steady_clock::now();
-
-#pragma omp parallel for schedule(dynamic, 1) num_threads(32)
-    for (ui i = 0; i < size(); ++i)
-    {
-        ui degree = get_p_vertex(i)->edges.size();
-        vLabel label = get_vertex_label(i);
-        for (ui j = 0; j < degree; ++j)
-        {
-            VertexID nbr = get_p_vertex(i)->edges[j].to;
-            vLabel nbr_label = get_vertex_label(nbr);
-            
-            FractionKey key(nbr, label);
-            bucketFD & bucket = vtx_frac.get_bucket(key);
-    	    bucket_mapFD & kvmap = bucket.get_map();
-
-            bucket.lock();
-            auto it = kvmap.find(key);
-            if (it == kvmap.end())
-            {
-                bucket.insert(key, std::min((double)1, 1/((double)nlf[i][nbr_label])));
-            }
-            else
-            {
-                kvmap[key] = std::min((double)1, kvmap[key] + 1/((double)nlf[i][nbr_label]));
-            }
-            bucket.unlock();
-        }
-    }
-
-    vtx_frac_rd.resize(size());
-    for (ui i = 0; i < CONMAP_BUCKET_NUM; ++i)
-    {
-        bucketFD & bucket = vtx_frac.pos(i);
-    	bucket_mapFD & kvmap = bucket.get_map();
-
-        for(auto it = kvmap.begin(); it != kvmap.end(); ++it)
-        {
-            vtx_frac_rd[it->first.id].insert({it->first.label, it->second});
-        }
-    }
-
-    auto time2 = steady_clock::now();
-    cout << "Fraction Time: " << (float)duration_cast<milliseconds>(time2 - time1).count()/1000 << " s" << endl;
-}
-#else
 void Graph::compute_fraction_score()
 {
-    auto time1 = steady_clock::now();
-    
+    auto fs_start = steady_clock::now();
+
     vtx_frac.resize(size());
     for (ui i = 0; i < size(); ++i)
     {
@@ -989,23 +905,21 @@ void Graph::compute_fraction_score()
         {
             VertexID nbr = get_p_vertex(i)->edges[j].to;
             vLabel nbr_label = get_vertex_label(nbr);
-        
-            if (vtx_frac[nbr].find(label) == vtx_frac[nbr].end()) 
+            
+            if (vtx_frac[nbr].find(label) == vtx_frac[nbr].end())
             {
                 vtx_frac[nbr][label] = 0.0;
             }
             vtx_frac[nbr][label] += 1/((double)nlf[i][nbr_label]);
-
-            if (vtx_frac[nbr][label] > 1)
+            if(vtx_frac[nbr][label] > 1)
             {
                 vtx_frac[nbr][label] = 1.0;
             }
         }
     }
-    auto time2 = steady_clock::now();
-    cout << "Fraction Time: " << (float)duration_cast<milliseconds>(time2 - time1).count()/1000 << " s" << endl;
+    auto fs_end = steady_clock::now();
+    cout << "[INFO] Fraction-Score Computation Time: " << (float)duration_cast<milliseconds>(fs_end - fs_start).count()/1000 << " s" << endl;
 }
-#endif
 
 // ########################################################################################
 // =========================== below are Pattern methods ==================================

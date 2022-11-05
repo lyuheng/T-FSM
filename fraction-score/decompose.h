@@ -77,6 +77,7 @@ void Decompose::decompose(Pattern &pattern, vector<vector<subPattern> > &mapping
                     eLabel edge_label = pattern.get_p_vertex(currentNode)->edges[k].label;
                     insert(sub_pattern.pattern.vertices_[currentNode_id].edges, currentNode_id, edge_label, nbr_id, edgeId);
                     insert(sub_pattern.pattern.vertices_[nbr_id].edges, nbr_id, edge_label, currentNode_id, edgeId);
+                    // sub_pattern.pattern.edge2vertex.push_back(sub_pattern.pattern.vertices_[currentNode_id].edges.back());
                     sub_pattern.pattern.edge2vertex.emplace_back(currentNode_id, edge_label, nbr_id, edgeId);
 
                     DFSstack.push_front(nbr);
