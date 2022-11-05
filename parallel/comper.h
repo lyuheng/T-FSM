@@ -1464,9 +1464,9 @@ public:
 
                                         if (!existence)
                                         {
-                                            tc->non_cand_mtx[task->u].lock();
+                                            tc->non_cand_mtx[u].lock();
                                             tc->pattern->non_candidates[u].insert(task->v);
-                                            tc->non_cand_mtx[task->u].unlock();
+                                            tc->non_cand_mtx[u].unlock();
 
                                             postprocess(u);
                                             delete totask;
