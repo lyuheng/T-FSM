@@ -1,31 +1,11 @@
-CC=g++
-FLAGS=-O3 -march=native -fopenmp -lpthread
-DEPS=grami.h global.h gmatch.h
+CCOMPILE=g++
+CPPFLAGS=-O3 -march=native
+SRCS = run.cpp intersection/computesetintersection.cpp
 
 all: run
 
-%.o: %.cpp $(DEPS)
-	$(CC) -o $@ $< $(CFLAGS)
-
-run: run.o computesetintersection.o	
-	$(CC) -o $@ $^ $(CFLAGS)
+run: run.cpp 
+	$(CCOMPILE) -std=c++14 -fopenmp -lpthread  $(CPPFLAGS) $(SRCS) -o run
 
 clean:
 	-rm run
-
-
-
-
-
-
-
-CC=gcc
-CFLAGS=-I.
-DEPS = hellomake.h
-OBJ = hellomake.o hellofunc.o 
-
-%.o: %.c $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
-
-hellomake: $(OBJ)
-	$(CC) -o $@ $^ $(CFLAGS)
