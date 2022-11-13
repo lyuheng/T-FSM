@@ -2,6 +2,7 @@ CC=g++
 CFLAGS=-std=c++14 -O3 -march=native
 OBJDIR=objs/
 OBJS=$(OBJDIR)intersection.o 
+INC=canonical.h decompose.h gmatch.h grami.h graph.h leapfrogjoin.h pretty_print.h setting.h types.h
 
 all: run
 
@@ -12,7 +13,7 @@ $(OBJDIR)intersection.o: intersection/computesetintersection.cpp intersection/co
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)run.o: run.cpp canonical.h decompose.h gmatch.h grami.h graph.h leapfrogjoin.h pretty_print.h setting.h types.h
+$(OBJDIR)run.o: run.cpp $(INC)
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
