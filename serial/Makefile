@@ -1,10 +1,23 @@
-CCOMPILE=g++
-CPPFLAGS=-O3 -march=native
+CC=g++
+CFLAGS=-std=c++14 -O3 -march=native
+OBJDIR=objs/
+OBJS=$(OBJDIR)intersection.o 
 
 all: run
 
-run: run.cpp
-	$(CCOMPILE) -std=c++14 run.cpp intersection/computesetintersection.cpp $(CPPFLAGS)  -o run
+run: $(OBJDIR)run.o $(OBJS)
+	$(CC) $(CFLAGS) $^ -o $@ 
+
+$(OBJDIR)intersection.o: intersection/computesetintersection.cpp intersection/computesetintersection.h 
+	$(MKDIR_P) $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)run.o: run.cpp canonical.h decompose.h gmatch.h grami.h graph.h leapfrogjoin.h pretty_print.h setting.h types.h
+	$(MKDIR_P) $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	-rm run
+	rm -rf run $(OBJDIR)
+
+
+MKDIR_P = mkdir -p
