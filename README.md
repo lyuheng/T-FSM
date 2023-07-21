@@ -3,14 +3,14 @@
 ### [Presentation Video](https://dl.acm.org/doi/10.1145/3588928)
 
 
-## Serial Verision
+## Serial Version
 
 Under the root directory of the project, execute the following commands to compile.
 ```
 cd T-FSM/serial
 make
 ```
-Run serial FSM using the following command. All frequent patterns are saved in grami_results.txt.
+Run serial FSM using the following command. All frequent patterns will be saved in grami_results.txt.
 ```
 ./run -file [GRAPHPATH] -freq [F] -maxNodes [MAXNODE]
 ```
@@ -69,7 +69,7 @@ Run Fraction-Score FSM using the following command.
 
 GRAPHPATH: required, the input graph path
 
-F: required, the user-given support threshold, in terms of Fraction-Score metric
+F: required, the user-given support threshold, with Fraction-Score metric
 
 T: required, the number of threads, 32 by default
 
