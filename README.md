@@ -1,6 +1,6 @@
 # T-FSM: A Task-Based System for Massively Parallel Frequent Subgraph Pattern Mining from a Big Graph
 
-### [Presentation Video](https://dl.acm.org/doi/10.1145/3588928)
+### [[Presentation Video]](https://dl.acm.org/doi/10.1145/3588928) &nbsp;&nbsp; [[Artifact Evaluation Report]](https://github.com/lyuheng/T-FSM/blob/main/AE-report.pdf)
 
 
 ## Serial Version
