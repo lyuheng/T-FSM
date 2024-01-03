@@ -726,7 +726,7 @@ public:
                     found_result = true;
                     gmatch_engine.mvisited_array[v] = false;
                 }
-                else if (gmatch_engine.countElaspedTime() < TIMEOUT_THRESHOLD)
+                else if (gmatch_engine.countElaspedTime() < DECOMPOSE_TIME_THRESHOLD)
                 {
                     cur_depth += 1;
                     counter[cur_depth] = 0;
